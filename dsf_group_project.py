@@ -112,7 +112,7 @@ def get_artist_Albums(token, artist_id):
   return json_result
 
 def get_several_artists(token, artist_ids):
-  query_url = "https://api.spotify.com/v1/artists/" + ','.join(artist_ids)
+  query_url = "https://api.spotify.com/v1/artists?ids=" + ','.join(artist_ids)
   headers = get_auth_header(token)
   result = get(query_url, headers=headers)
   if result.status_code != 200:
@@ -130,7 +130,7 @@ def chunker(seq, size):
     return (seq[pos:pos + size] for pos in range(0, len(seq), size))
 
 raw_data = pd.read_csv('charts.csv',
-                       parse_dates=['date'])
+                       parse_dates=['date'],  nrows=50000)
 
 raw_data.dropna(subset=['title','artist'], inplace = True)
 
@@ -162,27 +162,52 @@ if os.path.isfile("artist_data.csv"):
   df1 = pd.read_csv ('artist_data.csv')
   df1=df1[artists_columns]
 
+test1=raw_data.artist.unique().tolist()
+test2=df1['name'].tolist()
+artitst_to_query = set(test1).difference(test2)
+artistdata_tosave = dict()
+j=0
 
-several_count = 0
-for artist_row in raw_data.artist.unique()[220:300]:
-  fifty_IDs = []
-  repeatartist_row = False
+fifty_IDs = []
+for artist_row in artitst_to_query:
+  repeatartist_row = True
   artists = artist_row.split(',')
-  while  not repeatartist_row:
+  while repeatartist_row:
     if((len(fifty_IDs) + len(artists)) < 51):
+      repeatartist_row = False
       for a in artists:
         a=a.strip()
         a=a.strip('#')
         if a in df1.name.unique():
           continue
         artist_id = get_artist_id(token, a)
-        if artist_id in df1.id.unique():
+        if (artist_id in df1.id.unique()) or (artist_id in artistdata_tosave):
           continue
         else:
           fifty_IDs.append(artist_id)
     else:
       repeatartist_row = True
       sev_arts = get_several_artists(token, fifty_IDs)
+      fifty_IDs = []
+      #decode and save here
+      for info in sev_arts['artists']:
+        info['followers'] = info['followers']['total']
+        del info["uri"]
+        del info["images"]
+        del info["href"]
+        del info['external_urls']
+
+        artistdata_tosave[info['id']] = info
+        j=j+1
+
+      if j > 200:
+        print('save-file')
+        #df2 = pd.DataFrame.from_dict(artistdata_tosave, orient='index', columns=artists_columns)
+        #df2.reset_index(drop=True, inplace=True)
+        #df2.to_csv('artist_data.csv',columns=artists_columns, index=False, header=False, mode='a')
+        j=0
+        artistdata_tosave.clear()
+
       time.sleep(10)
 
 
