@@ -46,12 +46,12 @@ import time
 #_ = load_dotenv(find_dotenv()) # reading local .env file
 
 #anne
-client_id = 'dca1ba4c350249938ce4544158ae8458' #os.environ['CLIENT_ID']
-client_secret = '1c27a8f068f44548bb36c61d6247098e'#os.environ['CLIENT_SECRET']
+#client_id = 'dca1ba4c350249938ce4544158ae8458' #os.environ['CLIENT_ID']
+#client_secret = '1c27a8f068f44548bb36c61d6247098e'#os.environ['CLIENT_SECRET']
 
 #privthi
-#client_id = 'c392d42a11bf414182f69a9e40526bc6' #os.environ['CLIENT_ID']
-#client_secret = 'fde1f03252d749319749f55473ee2247'#os.environ['CLIENT_SECRET']
+client_id = 'c392d42a11bf414182f69a9e40526bc6' #os.environ['CLIENT_ID']
+client_secret = 'fde1f03252d749319749f55473ee2247'#os.environ['CLIENT_SECRET']
 
 print(client_id, client_secret)
 
@@ -125,14 +125,31 @@ def get_several_artists(token, artist_ids):
   json_result = json.loads(result.content)
   return json_result
 
+# Enter the artist's Name
+artist_id1 = get_artist_id(token, "Taylor Swift")
+artist_id2 = get_artist_id(token, "Jonas Brothers")
+print([artist_id1, artist_id2])
+# Artist info
+#print(get_several_artists(token, [artist_id1, artist_id2]))
+#print(get_artist_info(token, artist_id1))
+#print(get_artist_Albums(token, artist_id1))
 
-def chunker(seq, size):
-    return (seq[pos:pos + size] for pos in range(0, len(seq), size))
 
 raw_data = pd.read_csv('charts.csv',
                        parse_dates=['date'])
 
+print('min date: ',raw_data.date.min())
+print('max date: ',raw_data.date.max())
+print('columns: ',raw_data.columns)
+
+raw_data.isna().sum()
+
 raw_data.dropna(subset=['title','artist'], inplace = True)
+raw_data.isna().sum()
+
+"""feature engineering:"""
+
+raw_data
 
 raw_data['song_num_days_chart_region'] = raw_data.groupby(['chart','region','title','artist'])['date'].transform('nunique')
 raw_data['song_num_days_chart_global'] = raw_data.groupby(['chart','title','artist'])['date'].transform('nunique')
@@ -152,40 +169,77 @@ artists_columns = [ 'id',
                     'name',
                     'type',
                     #'uri',
+
                     'album_names',
                     'release_dates',
                     'total_tracks'
                   ]
 
+"""### Warning the below cell will take a long time to run"""
+
+artistdata = dict()
+failedartistdata = []
+
+file = open('failed_artists.txt','w')
+
 df1=[]
 if os.path.isfile("artist_data.csv"):
   df1 = pd.read_csv ('artist_data.csv')
   df1=df1[artists_columns]
+j=0
 
+for artist_row in raw_data.artist.unique()[220:]:
 
-several_count = 0
-for artist_row in raw_data.artist.unique()[220:300]:
-  fifty_IDs = []
-  repeatartist_row = False
+  #check if only 1 artist in in row
   artists = artist_row.split(',')
-  while  not repeatartist_row:
-    if((len(fifty_IDs) + len(artists)) < 51):
-      for a in artists:
-        a=a.strip()
-        a=a.strip('#')
-        if a in df1.name.unique():
-          continue
-        artist_id = get_artist_id(token, a)
-        if artist_id in df1.id.unique():
-          continue
-        else:
-          fifty_IDs.append(artist_id)
-    else:
-      repeatartist_row = True
-      sev_arts = get_several_artists(token, fifty_IDs)
-      time.sleep(10)
+  #print('artists: ',artists)
+  for a in artists:
+    a=a.strip()
+    a=a.strip('#')
+    if a in df1.name.unique():
+      #print("skip1")
+      continue
+    #else:
+      #print(a)
+    try:
+      artist_id = get_artist_id(token, a)
+      if artist_id in df1.id.unique():
+        #print("skip2")
+        continue
+      info = get_artist_info(token, artist_id)
+      time.sleep(1)
+      info['followers'] = info['followers']['total']
+      del info["uri"]
+      del info["images"]
+      del info["href"]
+      del info['external_urls']
+      info2 = get_artist_Albums(token, artist_id)
+      total_tracks = 0
+      album_names = []
+      release_dates = []
+      for i in info2['items']:
+        album_names.append(i['name'])
+        release_dates.append(i['release_date'])
+        total_tracks += i['total_tracks']
+
+      info['album_names'] = album_names
+      info['release_dates'] = release_dates
+      info['total_tracks'] = total_tracks
+      artistdata[artist_id] = info
+      j=j+1
+    except ZeroDivisionError:
+      print("we reached the limit again")
+      break
+    except:
+      file.write(a+"\n")
+    #reached 200..lets save to file so we dont lose it.
+    if j == 200:
+      print('save-file')
+      df2 = pd.DataFrame.from_dict(artistdata, orient='index', columns=artists_columns)
+      df2.reset_index(drop=True, inplace=True)
+      df2.to_csv('artist_data.csv',columns=artists_columns, index=False, header=False, mode='a')
+      j=0
+      artistdata.clear()
 
 
-
-  
-
+file.close()
