@@ -129,10 +129,12 @@ def get_several_artists(token, artist_ids):
 def chunker(seq, size):
     return (seq[pos:pos + size] for pos in range(0, len(seq), size))
 
-raw_data = pd.read_csv('charts.csv',
-                       parse_dates=['date'],  nrows=50000)
+raw_data = pd.read_csv('charts_USA_unique.csv',
+                       parse_dates=['date'])
 
 raw_data.dropna(subset=['title','artist'], inplace = True)
+raw_data = raw_data[raw_data['region'] == "United States"]
+print(len(raw_data.artist.unique().tolist()))
 
 raw_data['song_num_days_chart_region'] = raw_data.groupby(['chart','region','title','artist'])['date'].transform('nunique')
 raw_data['song_num_days_chart_global'] = raw_data.groupby(['chart','title','artist'])['date'].transform('nunique')
@@ -157,34 +159,95 @@ artists_columns = [ 'id',
                     'total_tracks'
                   ]
 
-df1=[]
-if os.path.isfile("artist_data.csv"):
-  df1 = pd.read_csv ('artist_data.csv')
-  df1=df1[artists_columns]
+df1 = DataFrame(columns=[artists_columns])
+if os.path.isfile("artist_data1.csv"):
+  df1 = pd.read_csv('artist_data1.csv')
+  df1 = df1[artists_columns]
+ 
 
 test1=raw_data.artist.unique().tolist()
-test2=df1['name'].tolist()
+newlist = []
+for word in test1:
+    word = word.split(",")
+    newlist.extend(word)  # <----
+
+test1 = list(map(str.strip, newlist))
+test1 = [s.strip('#') for s in test1]
+test1 = set(test1)
+if len(df1) > 0:
+  test2=df1['name'].tolist()
+else:
+  test2=[]
 artitst_to_query = set(test1).difference(test2)
 artistdata_tosave = dict()
 j=0
 
 fifty_IDs = []
+'''
+for artist_row in artitst_to_query:
+  if artist_row in df1.name.unique():
+    print("name in: ", artist_row)
+    continue
+  try:
+    artist_id = get_artist_id(token, artist_row)
+    if (artist_id in df1.id.unique()):
+      print("id1 in: ", artist_row)
+      continue
+    if ((artist_id in artistdata_tosave)):
+      print("id2 in: ", artist_row)
+      continue
+    fifty_IDs.append(artist_id)
+  except:
+    print('help!', artist_row)
+
+
+#simple loop through last 18
+sev_arts = get_several_artists(token, fifty_IDs)
+#decode and save here
+for info in sev_arts['artists']:
+  info['followers'] = info['followers']['total']
+  del info["uri"]
+  del info["images"]
+  del info["href"]
+  del info['external_urls']
+        #call artist album info
+  info2 = get_artist_Albums(token, artist_id)
+  total_tracks = 0
+  album_names = []
+  release_dates = []
+  for i in info2['items']:
+    album_names.append(i['name'])
+    release_dates.append(i['release_date'])
+    total_tracks += i['total_tracks']
+  info['album_names'] = album_names
+  info['release_dates'] = release_dates
+  info['total_tracks'] = total_tracks
+  artistdata_tosave[info['id']] = info
+
+
+print('save-file')
+df2 = pd.DataFrame.from_dict(artistdata_tosave, orient='index', columns=artists_columns)
+df2.reset_index(drop=True, inplace=True)
+df2.to_csv('artist_data1.csv',columns=artists_columns, index=False, header=False, mode='a')
+
+
+'''
 for artist_row in artitst_to_query:
   repeatartist_row = True
-  artists = artist_row.split(',')
   while repeatartist_row:
-    if((len(fifty_IDs) + len(artists)) < 51):
+    if((len(fifty_IDs)) < 50):
       repeatartist_row = False
-      for a in artists:
-        a=a.strip()
-        a=a.strip('#')
-        if a in df1.name.unique():
-          continue
-        artist_id = get_artist_id(token, a)
-        if (artist_id in df1.id.unique()) or (artist_id in artistdata_tosave):
-          continue
-        else:
-          fifty_IDs.append(artist_id)
+      #if artist_row in df1.name.unique():
+      # continue
+      try:
+        artist_id = get_artist_id(token, artist_row)
+      except:
+        print('failed: ', artist_row)
+        continue
+      if (artist_id in df1.id) or (artist_id in artistdata_tosave):
+        continue
+      else:
+        fifty_IDs.append(artist_id)
     else:
       repeatartist_row = True
       sev_arts = get_several_artists(token, fifty_IDs)
@@ -196,20 +259,31 @@ for artist_row in artitst_to_query:
         del info["images"]
         del info["href"]
         del info['external_urls']
-
+        #call artist album info
+        info2 = get_artist_Albums(token, info['id'])
+        total_tracks = 0
+        album_names = []
+        release_dates = []
+        for i in info2['items']:
+          album_names.append(i['name'])
+          release_dates.append(i['release_date'])
+          total_tracks += i['total_tracks']
+        info['album_names'] = album_names
+        info['release_dates'] = release_dates
+        info['total_tracks'] = total_tracks
         artistdata_tosave[info['id']] = info
         j=j+1
+        #time.sleep(1) #try not to go over limit!!
 
       if j > 200:
         print('save-file')
-        #df2 = pd.DataFrame.from_dict(artistdata_tosave, orient='index', columns=artists_columns)
-        #df2.reset_index(drop=True, inplace=True)
-        #df2.to_csv('artist_data.csv',columns=artists_columns, index=False, header=False, mode='a')
+        df2 = pd.DataFrame.from_dict(artistdata_tosave, orient='index', columns=artists_columns)
+        df2.reset_index(drop=True, inplace=True)
+        df2.to_csv('artist_data1.csv',columns=artists_columns, index=False, header=False, mode='a')
         j=0
         artistdata_tosave.clear()
 
-      time.sleep(10)
-
+print("fin")
 
 
   
