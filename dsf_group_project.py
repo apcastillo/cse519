@@ -172,10 +172,10 @@ for word in test1:
     newlist.extend(word)  # <----
 
 test1 = list(map(str.strip, newlist))
-test1 = [s.strip('#') for s in test1]
+test1 = [s.strip('#').upper() for s in test1]
 test1 = set(test1)
 if len(df1) > 0:
-  test2=df1['name'].tolist()
+  test2=df1['name'].str.upper().tolist()
 else:
   test2=[]
 artitst_to_query = set(test1).difference(test2)
@@ -235,7 +235,7 @@ df2.to_csv('artist_data1.csv',columns=artists_columns, index=False, header=False
 for artist_row in artitst_to_query:
   repeatartist_row = True
   while repeatartist_row:
-    if((len(fifty_IDs)) < 50):
+    if((len(fifty_IDs)) == 0):
       repeatartist_row = False
       #if artist_row in df1.name.unique():
       # continue
@@ -275,7 +275,7 @@ for artist_row in artitst_to_query:
         j=j+1
         #time.sleep(1) #try not to go over limit!!
 
-      if j > 200:
+      #if j > 200:
         print('save-file')
         df2 = pd.DataFrame.from_dict(artistdata_tosave, orient='index', columns=artists_columns)
         df2.reset_index(drop=True, inplace=True)
